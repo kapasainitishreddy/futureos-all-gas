@@ -1,0 +1,44 @@
+name: Deploy All Gas
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.13.1"
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Verify
+        run: |
+          npm run typecheck
+          npm test
+          npm run build
+      - name: Validate deploy key
+        shell: bash
+        run: |
+          if [ -z "${CONVEX_DEPLOY_KEY:-}" ]; then
+            echo "::error::Missing GitHub secret CONVEX_DEPLOY_KEY"
+            exit 1
+          fi
+      - name: Deploy backend and judge SPA
+        run: npm run deploy
+
+# Sponsor credentials belong on the Convex deployment, not in GitHub.
+# Required before this workflow is run:
+# OPENAI_API_KEY
+# FIRECRAWL_API_KEY
+# AGENTMAIL_API_KEY
+# AGENTMAIL_WEBHOOK_SECRET
+# Optional for one-shot Firecrawl search:
+# FIRECRAWL_WEBHOOK_SECRET
