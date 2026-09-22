@@ -84,9 +84,9 @@ The value is motivational rehearsal and reflection, not pretending an AI can kno
 
 ## Repository layout
 
-- hackathon/ — focused judge-facing Vite SPA
-- convex/ — Convex backend and sponsor integrations
-- src/ — original FutureOS Next.js product
+- src/ — FutureOS Vite/React experience, including the 75-day checkpoint path and Future You chat
+- convex/ — Convex schema, reactive queries/mutations/actions, sponsor integrations, and safety/cost controls
+- public/ — public demo assets served by Convex static hosting
 - hackathon.md — this build log
 
 ## Deployment
@@ -117,9 +117,10 @@ https://<deployment>.convex.site/agentmail/webhook
 ## Submission assets
 
 - Live URL: https://adept-ox-835.convex.site
-- Demo video (<3 min): **TODO**
-- Social post: **TODO**
-- vibeapps.dev submission: **TODO**
+- Demo video (2:30): https://adept-ox-835.convex.site/futureos-workflow-demo.mp4
+- Public repository: https://github.com/kapasainitishreddy/futureos-all-gas
+- Social post: pending author approval
+- vibeapps.dev submission: pending final review and author approval
 
 ## Build log
 
@@ -130,3 +131,4 @@ https://<deployment>.convex.site/agentmail/webhook
 - Sep 22: Added official AgentMail Convex component, Future Self mail sending, webhook, and reply ingestion.
 - Sep 22: Added OpenAI Future Self and future-letter generation with explicit non-prophecy guardrails.
 - Sep 22: Added Convex static hosting deploy script for a qualifying convex.site URL.
+- Sep 22: Added selectable 75-day checkpoints, an explicit “Talk to Day X You” action, and a 2:30 workflow demo video.
