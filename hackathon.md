@@ -116,7 +116,7 @@ https://<deployment>.convex.site/agentmail/webhook
 
 ## Submission assets
 
-- Live URL: **TODO after deploy**
+- Live URL: https://adept-ox-835.convex.site
 - Demo video (<3 min): **TODO**
 - Social post: **TODO**
 - vibeapps.dev submission: **TODO**

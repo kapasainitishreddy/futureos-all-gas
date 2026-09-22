@@ -5,7 +5,7 @@ import { AgentMail } from "@agentmail/convex";
 import { registerStaticRoutes } from "@convex-dev/static-hosting";
 
 const agentmail = new AgentMail(components.agentmail, {
-  onMessageReceived: internal.mail.onMessageReceived,
+  onMessageReceived: internal.mailStore.onMessageReceived,
 });
 
 const http = httpRouter();
@@ -13,7 +13,7 @@ const http = httpRouter();
 http.route({
   path:"/agentmail/webhook",
   method:"POST",
-  handler:httpAction(async(ctx,req)=>agentmail.handleWebhook(ctx,req))
+  handler:httpAction(async(ctx,req)=>agentmail.handleWebhook(ctx as any,req))
 });
 
 registerStaticRoutes(http, components.staticHosting);

@@ -108,7 +108,7 @@ The rule: FutureOS never pretends it can predict your life. It uses the future t
 ## Final submission fields
 
 - Public GitHub repo: **TODO**
-- Live convex.site URL: **TODO**
+- Live convex.site URL: https://adept-ox-835.convex.site
 - Demo video URL (<3 min): **TODO**
 - Social post URL: **TODO**
 - vibeapps.dev submission: **TODO**

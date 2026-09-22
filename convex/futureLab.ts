@@ -1,9 +1,11 @@
 import { v } from "convex/values";
-import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { action, env, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 
 const dayState = v.union(v.literal("done"), v.literal("partial"), v.literal("skip"));
 const MODEL = "gpt-5.6-luna";
+const futureLabInternal = internal.futureLab as any;
+const limitsInternal = internal.limits as any;
 
 function bounded(value:string,label:string,max:number){
   const clean=value.trim();
@@ -132,11 +134,11 @@ export const chat = action({
   args:{sessionId:v.string(),routineId:v.id("routines"),name:v.string(),message:v.string()},
   handler: async(ctx,args)=>{
     validSession(args.sessionId);
-    const c=await ctx.runQuery(internal.futureLab.context,{sessionId:args.sessionId,routineId:args.routineId});
+    const c=await ctx.runQuery(futureLabInternal.context,{sessionId:args.sessionId,routineId:args.routineId});
     const name=bounded(args.name,"Name",60);
     const message=bounded(args.message,"Message",600);
-    await ctx.runMutation(internal.limits.consume,{sessionId:args.sessionId,operation:"chat"});
-    const apiKey=process.env.OPENAI_API_KEY;
+    await ctx.runMutation(limitsInternal.consume,{sessionId:args.sessionId,operation:"chat"});
+    const apiKey=env.OPENAI_API_KEY;
     let reply="";
     let provider:"openai"|"fallback"="fallback";
     let providerError:string|undefined;
@@ -168,7 +170,7 @@ export const chat = action({
     }else providerError="OPENAI_API_KEY is not configured.";
     reply=reply.trim().slice(0,1_200);
     if(!reply) reply=fallback(name,c.routine,c.stats,message);
-    await ctx.runMutation(internal.futureLab.saveChat,{sessionId:args.sessionId,routineId:args.routineId,userText:message,assistantText:reply,provider,providerError});
+    await ctx.runMutation(futureLabInternal.saveChat,{sessionId:args.sessionId,routineId:args.routineId,userText:message,assistantText:reply,provider,providerError});
     return {reply,provider,warning:provider==="fallback"?"Future Self is temporarily unavailable; a fallback response was used.":undefined};
   }
 });

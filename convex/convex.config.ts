@@ -6,6 +6,7 @@ import staticHosting from "@convex-dev/static-hosting/convex.config";
 
 const app = defineApp({
   env: {
+    OPENAI_API_KEY: v.string(),
     FIRECRAWL_API_KEY: v.string(),
     FIRECRAWL_WEBHOOK_SECRET: v.optional(v.string()),
   },

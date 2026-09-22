@@ -14,7 +14,7 @@ FutureOS is motivational rehearsal—not prophecy. It never guarantees medical, 
 4. Run a **Reality Check** to fetch current sources.
 5. Send a **Letter Through Time** to your email.
 
-Live demo: pending production deployment.
+Live demo: https://adept-ox-835.convex.site
 
 ## Sponsor stack
 
