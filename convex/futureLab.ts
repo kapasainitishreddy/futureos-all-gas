@@ -143,7 +143,7 @@ export const chat = action({
     const c=await ctx.runQuery(futureLabInternal.context,{sessionId:args.sessionId,routineId:args.routineId});
     const name=bounded(args.name,"Name",60);
     const message=bounded(args.message,"Message",600);
-    if(!Number.isInteger(args.daysAhead) || args.daysAhead<1 || args.daysAhead>30) throw new Error("Time horizon must be between 1 and 30 days.");
+    if(!Number.isInteger(args.daysAhead) || args.daysAhead<1 || args.daysAhead>75) throw new Error("Time horizon must be between 1 and 75 days.");
     await ctx.runMutation(limitsInternal.consume,{sessionId:args.sessionId,operation:"chat"});
     const apiKey=env.OPENAI_API_KEY;
     let reply="";
