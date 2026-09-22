@@ -12,6 +12,14 @@ export default defineSchema({
     .index("by_session", ["sessionId"])
     .index("by_inbox", ["inboxId"]),
 
+  usageLimits: defineTable({
+    sessionId: v.string(),
+    operation: v.union(v.literal("chat"), v.literal("research"), v.literal("email")),
+    windowKey: v.string(),
+    count: v.number(),
+    lastAt: v.number(),
+  }).index("by_session_and_operation", ["sessionId", "operation"]),
+
   routines: defineTable({
     sessionId: v.string(),
     title: v.string(),

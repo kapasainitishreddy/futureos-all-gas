@@ -8,13 +8,15 @@ const firecrawl = new FirecrawlClient(components.firecrawl);
 export const realityCheck = action({
   args:{sessionId:v.string(),routineId:v.id("routines")},
   handler: async(ctx,args)=>{
+    if(!args.sessionId || args.sessionId.length>128) throw new Error("Invalid session.");
     const c=await ctx.runQuery(internal.futureLab.context,args);
-    const query=`${c.routine.title} ${c.routine.dailyTarget} ${c.routine.unit} practical evidence-based guidance current research habits behavior`;
+    await ctx.runMutation(internal.limits.consume,{sessionId:args.sessionId,operation:"research"});
+    const query=`${c.routine.title.slice(0,80)} ${c.routine.dailyTarget} ${c.routine.unit.slice(0,40)} practical evidence-based guidance habits behavior`.slice(0,220);
     let raw:any;
     try{
       raw=await firecrawl.search(ctx,query,{limit:4,scrapeOptions:{formats:["markdown"],onlyMainContent:true}});
-    }catch(error){
-      throw new Error(`Live research failed: ${error instanceof Error?error.message:"Firecrawl request failed."}`);
+    }catch{
+      throw new Error("Live research is temporarily unavailable. Try again later.");
     }
     const source=Array.isArray(raw?.web)?raw.web:Array.isArray(raw?.data?.web)?raw.data.web:Array.isArray(raw?.data)?raw.data:[];
     const items=source.slice(0,4).map((x:any)=>({

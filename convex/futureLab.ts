@@ -3,6 +3,17 @@ import { action, internalMutation, internalQuery, mutation, query } from "./_gen
 import { internal } from "./_generated/api";
 
 const dayState = v.union(v.literal("done"), v.literal("partial"), v.literal("skip"));
+const MODEL = "gpt-5.6-luna";
+
+function bounded(value:string,label:string,max:number){
+  const clean=value.trim();
+  if(!clean || clean.length>max) throw new Error(`${label} must be between 1 and ${max} characters.`);
+  return clean;
+}
+
+function validSession(sessionId:string){
+  if(!sessionId || sessionId.length>128) throw new Error("Invalid session.");
+}
 
 function storyFor(routine: any) {
   const checkpoints = [...new Set([1, Math.max(2, Math.ceil(routine.days / 3)), Math.max(3, Math.ceil(routine.days * 2 / 3)), routine.days])];
@@ -51,15 +62,24 @@ export const createRoutine = mutation({
     dailyTarget:v.number(), unit:v.string(), why:v.string(),
   },
   handler: async (ctx,args) => {
+    validSession(args.sessionId);
+    const title=bounded(args.title,"Title",80);
+    const domain=bounded(args.domain,"Domain",40);
+    const unit=bounded(args.unit,"Unit",40);
+    const why=bounded(args.why,"Reason",240);
+    if(!Number.isInteger(args.days) || args.days<1 || args.days>365) throw new Error("Days must be between 1 and 365.");
+    if(!Number.isFinite(args.dailyTarget) || args.dailyTarget<=0 || args.dailyTarget>10_000) throw new Error("Daily target is outside the allowed range.");
     const old=await ctx.db.query("routines").withIndex("by_session",q=>q.eq("sessionId",args.sessionId)).collect();
+    if(old.length>=8) throw new Error("This demo supports up to eight branches per session.");
     for(const r of old.filter(r=>r.active)) await ctx.db.patch(r._id,{active:false});
-    return await ctx.db.insert("routines",{...args,active:true,createdAt:Date.now()});
+    return await ctx.db.insert("routines",{...args,title,domain,unit,why,active:true,createdAt:Date.now()});
   }
 });
 
 export const selectRoutine = mutation({
   args:{sessionId:v.string(),routineId:v.id("routines")},
   handler: async(ctx,args)=>{
+    validSession(args.sessionId);
     const all=await ctx.db.query("routines").withIndex("by_session",q=>q.eq("sessionId",args.sessionId)).collect();
     if(!all.some(r=>r._id===args.routineId)) throw new Error("That branch does not belong to this session.");
     for(const r of all) await ctx.db.patch(r._id,{active:r._id===args.routineId});
@@ -69,6 +89,9 @@ export const selectRoutine = mutation({
 export const logDay = mutation({
   args:{sessionId:v.string(),routineId:v.id("routines"),dayKey:v.string(),state:dayState,note:v.string()},
   handler: async(ctx,args)=>{
+    validSession(args.sessionId);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(args.dayKey)) throw new Error("Invalid day.");
+    if(args.note.length>240) throw new Error("Note must be 240 characters or fewer.");
     const routine=await ctx.db.get(args.routineId);
     if(!routine || routine.sessionId!==args.sessionId) throw new Error("That branch does not belong to this session.");
     const existing=await ctx.db.query("routineDays").withIndex("by_routine_and_day",q=>q.eq("routineId",args.routineId).eq("dayKey",args.dayKey)).unique();
@@ -108,7 +131,11 @@ function fallback(name:string,routine:any,stats:any,text:string){
 export const chat = action({
   args:{sessionId:v.string(),routineId:v.id("routines"),name:v.string(),message:v.string()},
   handler: async(ctx,args)=>{
+    validSession(args.sessionId);
     const c=await ctx.runQuery(internal.futureLab.context,{sessionId:args.sessionId,routineId:args.routineId});
+    const name=bounded(args.name,"Name",60);
+    const message=bounded(args.message,"Message",600);
+    await ctx.runMutation(internal.limits.consume,{sessionId:args.sessionId,operation:"chat"});
     const apiKey=process.env.OPENAI_API_KEY;
     let reply="";
     let provider:"openai"|"fallback"="fallback";
@@ -119,14 +146,14 @@ export const chat = action({
           method:"POST",
           headers:{"content-type":"application/json",authorization:`Bearer ${apiKey}`},
           body:JSON.stringify({
-            model:process.env.OPENAI_FUTURE_MODEL || "gpt-5.6-luna",
-            max_output_tokens:350,
+            model:MODEL,
+            max_output_tokens:240,
             reasoning:{effort:"low"},
             store:false,
             safety_identifier:args.sessionId.slice(0,64),
-            instructions:"You are FutureOS Future Self: one plausible future branch after the user's chosen routine. Never claim prophecy. Never guarantee medical, sexual, romantic, career, financial, appearance, or psychological outcomes. Never invent another person's consent, attraction, acceptance, rejection, or motives. Treat missed days as data and encourage resuming. Speak vividly but briefly, in first-person future-self voice, and end with one concrete present-tense action.",
+            instructions:"You are FutureOS Future Self: one plausible future branch after the chosen routine. Never claim prophecy or guarantee outcomes. Never invent another person's consent, attraction, decisions, or motives. Treat missed days as data. Reply in first person, under 110 words, and end with one safe action for today.",
             input:[
-              {role:"user",content:[{type:"input_text",text:JSON.stringify({name:args.name,message:args.message,routine:c.routine,stats:c.stats,recentMessages:c.messages})}]}
+              {role:"user",content:[{type:"input_text",text:JSON.stringify({name,message,routine:{title:c.routine.title,days:c.routine.days,dailyTarget:c.routine.dailyTarget,unit:c.routine.unit,why:c.routine.why.slice(0,160)},stats:c.stats,recentMessages:c.messages.slice(-6).map((item:any)=>({role:item.role,content:item.content.slice(0,400)}))})}]}
             ]
           })
         });
@@ -137,10 +164,11 @@ export const chat = action({
         }else{
           providerError=`OpenAI returned ${response.status}.`;
         }
-      }catch(error){providerError=error instanceof Error?error.message:"OpenAI request failed.";}
+      }catch{providerError="OpenAI request failed.";}
     }else providerError="OPENAI_API_KEY is not configured.";
-    if(!reply) reply=fallback(args.name,c.routine,c.stats,args.message);
-    await ctx.runMutation(internal.futureLab.saveChat,{sessionId:args.sessionId,routineId:args.routineId,userText:args.message,assistantText:reply,provider,providerError});
+    reply=reply.trim().slice(0,1_200);
+    if(!reply) reply=fallback(name,c.routine,c.stats,message);
+    await ctx.runMutation(internal.futureLab.saveChat,{sessionId:args.sessionId,routineId:args.routineId,userText:message,assistantText:reply,provider,providerError});
     return {reply,provider,warning:provider==="fallback"?"Future Self is temporarily unavailable; a fallback response was used.":undefined};
   }
 });

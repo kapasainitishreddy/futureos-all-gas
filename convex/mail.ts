@@ -6,6 +6,7 @@ import { components, internal } from "./_generated/api";
 const agentmail = new AgentMail(components.agentmail, {
   onMessageReceived: internal.mail.onMessageReceived,
 });
+const MODEL = "gpt-5.6-luna";
 
 export const getSession = internalQuery({
   args:{sessionId:v.string()},
@@ -48,8 +49,13 @@ export const enqueueLetter = internalMutation({
 export const sendFutureLetter = action({
   args:{sessionId:v.string(),routineId:v.id("routines"),email:v.string(),name:v.string()},
   handler: async(ctx,args)=>{
-    if(!/^\S+@\S+\.\S+$/.test(args.email)) throw new Error("Enter a valid email address.");
+    const email=args.email.trim().toLowerCase();
+    const name=args.name.trim();
+    if(email.length>254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Enter a valid email address.");
+    if(!name || name.length>60) throw new Error("Name must be between 1 and 60 characters.");
+    if(!args.sessionId || args.sessionId.length>128) throw new Error("Invalid session.");
     const c=await ctx.runQuery(internal.futureLab.context,{sessionId:args.sessionId,routineId:args.routineId});
+    await ctx.runMutation(internal.limits.consume,{sessionId:args.sessionId,operation:"email"});
     const session=await ctx.runQuery(internal.mail.getSession,{sessionId:args.sessionId});
     let inboxId=session?.inboxId;
     if(!inboxId){
@@ -59,10 +65,10 @@ export const sendFutureLetter = action({
       });
       inboxId=String(created?.inbox_id || created?.inboxId || created?.id || "");
       if(!inboxId) throw new Error("AgentMail inbox creation did not return an inbox id.");
-      await ctx.runMutation(internal.mail.saveInbox,{sessionId:args.sessionId,inboxId,email:args.email});
+      await ctx.runMutation(internal.mail.saveInbox,{sessionId:args.sessionId,inboxId,email});
     }
     const apiKey=process.env.OPENAI_API_KEY;
-    let text=`${args.name},\n\nI’m the Day ${c.routine.days} branch of you. I’m not a prediction. I’m a reminder that today’s ${c.routine.dailyTarget} ${c.routine.unit} is the only part of this story you can control.\n\nYou do not need a perfect streak. Resume.\n\n— Future You, via FutureOS`;
+    let text=`${name},\n\nI’m the Day ${c.routine.days} branch of you. I’m not a prediction. I’m a reminder that today’s ${c.routine.dailyTarget} ${c.routine.unit} is the only part of this story you can control.\n\nYou do not need a perfect streak. Resume.\n\n— Future You, via FutureOS`;
     let generationProvider:"openai"|"fallback"="fallback";
     let generationError:string|undefined;
     if(apiKey){
@@ -71,20 +77,21 @@ export const sendFutureLetter = action({
           method:"POST",
           headers:{"content-type":"application/json",authorization:`Bearer ${apiKey}`},
           body:JSON.stringify({
-            model:process.env.OPENAI_FUTURE_MODEL || "gpt-5.6-luna",
-            max_output_tokens:420,
+            model:MODEL,
+            max_output_tokens:280,
             reasoning:{effort:"low"},
             store:false,
             safety_identifier:args.sessionId.slice(0,64),
-            instructions:"Write a warm email of at most 180 words from a plausible future self after the user's chosen routine. Never claim certainty or guarantee medical, sexual, romantic, career, financial, appearance, or psychological outcomes. Never invent another person's decisions. End with one concrete action for today.",
-            input:JSON.stringify({name:args.name,routine:c.routine,stats:c.stats})
+            instructions:"Write a warm email under 130 words from a plausible future self after the chosen routine. Never claim certainty or guarantee outcomes. Never invent another person's decisions. End with one safe, concrete action for today.",
+            input:JSON.stringify({name,routine:{title:c.routine.title,days:c.routine.days,dailyTarget:c.routine.dailyTarget,unit:c.routine.unit,why:c.routine.why.slice(0,160)},stats:c.stats})
           })
         });
         if(response.ok){const data:any=await response.json();if(data.output_text){text=data.output_text;generationProvider="openai";}}
         else generationError=`OpenAI returned ${response.status}.`;
-      }catch(error){generationError=error instanceof Error?error.message:"OpenAI request failed.";}
+      }catch{generationError="OpenAI request failed.";}
     }else generationError="OPENAI_API_KEY is not configured.";
-    const outboundId=await ctx.runMutation(internal.mail.enqueueLetter,{inboxId,to:args.email,subject:`A letter from Day ${c.routine.days} You`,text});
+    text=text.trim().slice(0,2_000);
+    const outboundId=await ctx.runMutation(internal.mail.enqueueLetter,{inboxId,to:email,subject:`A letter from Day ${c.routine.days} You`,text});
     await ctx.runMutation(internal.mail.saveOutbound,{sessionId:args.sessionId,outboundId:String(outboundId)});
     return {queued:true,outboundId:String(outboundId),inboxId,generationProvider,generationError};
   }
@@ -101,9 +108,9 @@ export const onMessageReceived = internalMutation({
     await ctx.db.insert("inboundLetters",{
       sessionId:session.sessionId,
       inboxId,
-      from:String(message.from || message.sender || "Email reply"),
-      subject:String(message.subject || "Reply to FutureOS"),
-      text:String(message.text || message.extracted_text || ""),
+      from:String(message.from || message.sender || "Email reply").slice(0,254),
+      subject:String(message.subject || "Reply to FutureOS").slice(0,200),
+      text:String(message.text || message.extracted_text || "").slice(0,5_000),
       createdAt:Date.now()
     });
   }
