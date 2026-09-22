@@ -136,6 +136,7 @@ export const chat = action({
   args:{
     sessionId:v.string(), routineId:v.id("routines"), name:v.string(), message:v.string(),
     trajectory:v.union(v.literal("continue"),v.literal("recover")), daysAhead:v.number(),
+    branchPoint:v.union(v.literal("protect"),v.literal("partial"),v.literal("restart")),
   },
   handler: async(ctx,args)=>{
     validSession(args.sessionId);
@@ -160,7 +161,7 @@ export const chat = action({
             safety_identifier:args.sessionId.slice(0,64),
             instructions:"You are FutureOS Future Self: one plausible future branch after the chosen routine. Never claim prophecy or guarantee outcomes. Never invent another person's consent, attraction, decisions, or motives. Treat missed days as data. The chosen scenario is only a rehearsal, not a prediction. Reply in first person, under 110 words, and end with one safe action for today.",
             input:[
-              {role:"user",content:[{type:"input_text",text:JSON.stringify({name,message,scenario:{trajectory:args.trajectory,daysAhead:args.daysAhead},routine:{title:c.routine.title,days:c.routine.days,dailyTarget:c.routine.dailyTarget,unit:c.routine.unit,why:c.routine.why.slice(0,160)},stats:c.stats,recentMessages:c.messages.slice(-6).map((item:any)=>({role:item.role,content:item.content.slice(0,400)}))})}]}
+              {role:"user",content:[{type:"input_text",text:JSON.stringify({name,message,scenario:{trajectory:args.trajectory,branchPoint:args.branchPoint,daysAhead:args.daysAhead},routine:{title:c.routine.title,days:c.routine.days,dailyTarget:c.routine.dailyTarget,unit:c.routine.unit,why:c.routine.why.slice(0,160)},stats:c.stats,recentMessages:c.messages.slice(-6).map((item:any)=>({role:item.role,content:item.content.slice(0,400)}))})}]}
             ]
           })
         });

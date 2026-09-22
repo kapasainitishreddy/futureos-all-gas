@@ -2,15 +2,15 @@
 
 > Don’t predict your future. Talk to the person your choices are creating.
 
-FutureOS turns a routine you control into a plausible future-self branch. Its main simulator lets you choose **Continue** or **Recover**, move a 1–30 day horizon, see the branch change in a purposeful 3D scene, and talk to the future self shaped by that exact scenario. You can then log today as **Done**, **Partial**, or **Missed**, ground the story in live sources, and receive a real email from the branch.
+FutureOS turns a routine you control into a plausible future-self branch. Its main simulator lets you choose **Continue** or **Recover**, then select real checkpoint branches—**Protect**, **Partial**, or **Restart**—move a 1–30 day horizon, see the branch change in a purposeful 3D scene, and talk to the future self shaped by that exact scenario. You can then log today as **Done**, **Partial**, or **Missed**, ground the story in live sources, and receive a real email from the branch.
 
 FutureOS is motivational rehearsal—not prophecy. It never guarantees medical, sexual, romantic, career, financial, appearance, or psychological outcomes, and it never invents another person’s decisions.
 
 ## Try the demo
 
-1. Create **Study One Hour** for 75 days.
-2. Record today as **Partial**.
-3. Switch between **Continue** and **Recover**, move the time horizon, and ask Future You: “If I keep returning for the next 14 days, what changes honestly?”
+1. Create **75-Day Workout Protocol** for a visible A/B/C training-plan demo, or **Study One Hour** for a learning demo.
+2. Select **Protect**, **Partial**, or **Restart**—each alters the current scenario context, not just the artwork.
+3. Move the time horizon and ask Future You: “If I protect this workout plan for the next 14 days, what changes honestly?”
 4. Run a **Reality Check** to fetch current sources.
 5. Send a **Letter Through Time** to your email.
 
