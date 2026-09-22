@@ -1,350 +1,100 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { anyApi } from "convex/server";
 
 const api = anyApi;
-type Tab = "today" | "future" | "reality";
 type DayState = "done" | "partial" | "skip";
+type Trajectory = "continue" | "recover";
 type Notice = { kind: "success" | "warning" | "error"; text: string } | null;
-
-type Preset = {
-  title: string;
-  domain: string;
-  days: number;
-  dailyTarget: number;
-  unit: string;
-  why: string;
-};
-
+type Preset = { title: string; domain: string; days: number; dailyTarget: number; unit: string; why: string };
 const presets: Preset[] = [
   { title: "Study One Hour", domain: "Learning", days: 75, dailyTarget: 60, unit: "minutes", why: "Build proof that focused study is part of who I am." },
   { title: "21-Day Sexual Self-Control", domain: "Self-direction", days: 21, dailyTarget: 1, unit: "deliberate choice", why: "Practice deliberate choice without inventing medical benefits." },
   { title: "75-Day Discipline", domain: "Follow-through", days: 75, dailyTarget: 1, unit: "daily protocol", why: "Keep returning to the planned work after motivation fades." },
   { title: "30-Day Courage Practice", domain: "Agency", days: 30, dailyTarget: 1, unit: "courage action", why: "Take respectful action without controlling another person’s answer." },
 ];
-
 const previewSnapshot = {
-  routines: [{ _id: "preview", ...presets[0], active: true }],
-  selected: { _id: "preview", ...presets[0], active: true },
-  stats: { done: 11, partial: 3, skip: 2, consistency: 78 },
-  todayState: "partial",
-  story: [
-    { day: 1, title: "The first vote", scene: "Nothing magical happened. You simply did the controllable thing once.", lesson: "Begin smaller than your ambition." },
-    { day: 25, title: "The ordinary middle", scene: "Novelty left. The practice stayed because imperfect days became information.", lesson: "Return before you feel ready." },
-    { day: 50, title: "Quiet evidence", scene: "The work started needing less negotiation. Not certainty—familiarity.", lesson: "Let repetition carry the mood." },
-    { day: 75, title: "The handoff", scene: "This branch came from repeated evidence, not a perfect streak.", lesson: "Keep what became useful." },
-  ],
-  messages: [
-    { _id: "m1", role: "user", content: "I missed yesterday. Did I ruin this?" },
-    { _id: "m2", role: "assistant", provider: "openai", content: "No. I’m the branch where one missed day became a useful signal, not a verdict. Open the book and study for ten honest minutes now; momentum can follow." },
-  ],
-  research: null,
-  inbound: [],
+  routines: [{ _id: "preview", ...presets[0], active: true }], selected: { _id: "preview", ...presets[0], active: true },
+  stats: { done: 11, partial: 3, skip: 2, consistency: 78 }, todayState: "partial",
+  messages: [{ _id: "m1", role: "user", content: "What changed because I kept returning?" }, { _id: "m2", role: "assistant", provider: "openai", content: "Not everything became easy. You just stopped treating one imperfect day as a reason to abandon the next one. Today, protect one honest hour." }],
+  research: null, inbound: [],
 };
-
-function getSessionId() {
-  const key = "futureos-all-gas-session";
-  let value = localStorage.getItem(key);
-  if (!value) {
-    value = crypto.randomUUID();
-    localStorage.setItem(key, value);
-  }
-  return value;
-}
-
-function asMessage(error: unknown, fallback: string) {
-  return error instanceof Error && error.message ? error.message : fallback;
-}
-
-function progressFor(selected: any, stats: any) {
-  if (!selected) return 0;
-  return Math.min(100, Math.round((((stats?.done ?? 0) + (stats?.partial ?? 0) * 0.5) / Math.max(1, selected.days)) * 100));
-}
+function getSessionId() { const key = "futureos-all-gas-session"; let value = localStorage.getItem(key); if (!value) { value = crypto.randomUUID(); localStorage.setItem(key, value); } return value; }
+function messageFor(error: unknown, fallback: string) { return error instanceof Error && error.message ? error.message : fallback; }
+function progressFor(selected: any, stats: any) { if (!selected) return 0; return Math.min(100, Math.round((((stats?.done ?? 0) + (stats?.partial ?? 0) * .5) / Math.max(1, selected.days)) * 100)); }
 
 export class ErrorBoundary extends React.Component<React.PropsWithChildren, { failed: boolean }> {
-  state = { failed: false };
-  static getDerivedStateFromError() { return { failed: true }; }
-  render() {
-    if (this.state.failed) {
-      return <CenteredState title="FutureOS could not load this branch." detail="The backend connection failed before the workspace became available." action="Try again" onAction={() => window.location.reload()} />;
-    }
-    return this.props.children;
-  }
+  state = { failed: false }; static getDerivedStateFromError() { return { failed: true }; }
+  render() { return this.state.failed ? <CenteredState title="FutureOS could not restore this branch." detail="The workspace did not load. Reload once the connection is back." action="Reload" onAction={() => window.location.reload()} /> : this.props.children; }
 }
-
-export function ConfigurationNotice() {
-  return <CenteredState title="Connect the Convex deployment." detail="Set VITE_CONVEX_URL for local development. The production static-hosting deploy injects it automatically." />;
-}
-
+export function ConfigurationNotice() { return <CenteredState title="Connect the Convex deployment." detail="Set VITE_CONVEX_URL to start FutureOS locally." />; }
 export function PreviewApp() {
-  const [tab, setTab] = useState<Tab>("today");
-  const onboarding = new URLSearchParams(window.location.search).get("preview") === "onboarding";
-  const snapshot = onboarding ? { ...previewSnapshot, selected: null, routines: [] } : previewSnapshot;
-  return <AppFrame snapshot={snapshot} tab={tab} setTab={setTab} name="Builder" setName={() => {}} busy="" notice={{ kind: "warning", text: "Local design preview — sponsor actions are intentionally disabled." }} onCreate={() => {}} onSelect={() => {}} onLog={() => {}} onChat={() => {}} onResearch={() => {}} onEmail={() => {}} emailStatus={null} preview />;
+  const [created, setCreated] = useState(!new URLSearchParams(window.location.search).has("preview"));
+  return <FutureOSFrame snapshot={created ? previewSnapshot : { ...previewSnapshot, selected: null, routines: [] }} name="Builder" setName={() => {}} busy="" notice={{ kind: "warning", text: "Design preview — live actions are intentionally disabled." }} onCreate={() => setCreated(true)} onLog={() => {}} onChat={() => {}} onResearch={() => {}} onEmail={() => {}} preview />;
 }
-
 export function FutureOSApp() {
-  const [sessionId] = useState(getSessionId);
-  const [name, setNameState] = useState(() => localStorage.getItem("futureos-name") || "Builder");
-  const [tab, setTab] = useState<Tab>("today");
-  const [busy, setBusy] = useState("");
-  const [notice, setNotice] = useState<Notice>(null);
-  const [outboundId, setOutboundId] = useState(() => localStorage.getItem("futureos-outbound-id"));
-  const dayKey = useMemo(() => new Date().toISOString().slice(0, 10), []);
-  const snapshot: any = useQuery(api.futureLab.snapshot, { sessionId, dayKey });
-  const emailStatus: any = useQuery(api.mail.deliveryStatus, outboundId ? { outboundId } : "skip");
-  const createRoutine = useMutation(api.futureLab.createRoutine);
-  const selectRoutine = useMutation(api.futureLab.selectRoutine);
-  const logDay = useMutation(api.futureLab.logDay);
-  const chat = useAction(api.futureLab.chat);
-  const realityCheck = useAction(api.research.realityCheck);
-  const sendFutureLetter = useAction(api.mail.sendFutureLetter);
-
-  const setName = (value: string) => {
-    setNameState(value);
-    localStorage.setItem("futureos-name", value);
-  };
-
-  const run = async (key: string, task: () => Promise<void>, failure: string) => {
-    setBusy(key);
-    setNotice(null);
-    try { await task(); }
-    catch (error) { setNotice({ kind: "error", text: asMessage(error, failure) }); }
-    finally { setBusy(""); }
-  };
-
+  const [sessionId] = useState(getSessionId); const [name, setNameState] = useState(() => localStorage.getItem("futureos-name") || "Builder");
+  const [busy, setBusy] = useState(""); const [notice, setNotice] = useState<Notice>(null); const [outboundId, setOutboundId] = useState(() => localStorage.getItem("futureos-outbound-id"));
+  const dayKey = useMemo(() => new Date().toISOString().slice(0, 10), []); const snapshot: any = useQuery(api.futureLab.snapshot, { sessionId, dayKey }); const emailStatus: any = useQuery(api.mail.deliveryStatus, outboundId ? { outboundId } : "skip");
+  const createRoutine = useMutation(api.futureLab.createRoutine); const logDay = useMutation(api.futureLab.logDay); const chat = useAction(api.futureLab.chat); const realityCheck = useAction(api.research.realityCheck); const sendFutureLetter = useAction(api.mail.sendFutureLetter);
+  const setName = (value: string) => { setNameState(value); localStorage.setItem("futureos-name", value); };
+  const run = async (key: string, task: () => Promise<void>, failure: string) => { setBusy(key); setNotice(null); try { await task(); } catch (error) { setNotice({ kind: "error", text: messageFor(error, failure) }); } finally { setBusy(""); } };
   if (snapshot === undefined) return <LoadingState />;
-
-  return <AppFrame
-    snapshot={snapshot}
-    tab={tab}
-    setTab={setTab}
-    name={name}
-    setName={setName}
-    busy={busy}
-    notice={notice}
-    emailStatus={emailStatus}
-    onCreate={(preset) => run("create", async () => { await createRoutine({ sessionId, ...preset }); setNotice({ kind: "success", text: `${preset.title} is now your active branch.` }); }, "The branch could not be created. Try again.")}
-    onSelect={(routineId) => run("select", async () => { await selectRoutine({ sessionId, routineId }); }, "The branch could not be selected.")}
-    onLog={(routineId, state) => run("log", async () => { await logDay({ sessionId, routineId, dayKey, state, note: "" }); setNotice({ kind: "success", text: state === "skip" ? "Missed recorded as information—not identity." : `${state === "done" ? "Done" : "Partial"} recorded for today.` }); }, "Today’s evidence could not be saved.")}
-    onChat={(routineId, message) => run("chat", async () => {
-      const result: any = await chat({ sessionId, routineId, name, message });
-      if (result?.provider !== "openai") setNotice({ kind: "warning", text: result?.warning || "Future Self is temporarily unavailable; a clearly marked fallback response was used." });
-    }, "Future Self is temporarily unavailable. Your message was preserved; try again.")}
-    onResearch={(routineId) => run("research", async () => { await realityCheck({ sessionId, routineId }); setTab("reality"); setNotice({ kind: "success", text: "Live sources saved to this branch." }); }, "Live research failed. Check the Firecrawl configuration and try again.")}
-    onEmail={(routineId, email) => run("email", async () => {
-      const result: any = await sendFutureLetter({ sessionId, routineId, email, name });
-      if (result?.outboundId) {
-        setOutboundId(result.outboundId);
-        localStorage.setItem("futureos-outbound-id", result.outboundId);
-      }
-      setNotice({ kind: result?.generationProvider === "openai" ? "success" : "warning", text: result?.generationProvider === "openai" ? "AgentMail queued a real letter written by Future You." : "AgentMail queued the letter, but OpenAI was unavailable so the fallback letter was used." });
-    }, "The email could not be sent. Check AgentMail and try again.")}
+  return <FutureOSFrame snapshot={snapshot} name={name} setName={setName} busy={busy} notice={notice} emailStatus={emailStatus}
+    onCreate={(preset) => run("create", async () => { await createRoutine({ sessionId, ...preset }); setNotice({ kind: "success", text: "Your future branch is ready. Ask it something real." }); }, "The branch could not be created.")}
+    onLog={(routineId, state) => run("log", async () => { await logDay({ sessionId, routineId, dayKey, state, note: "" }); setNotice({ kind: "success", text: state === "skip" ? "A missed day is data. Choose your recovery branch." : "Today’s evidence is saved." }); }, "Today’s evidence could not be saved.")}
+    onChat={(routineId, message, trajectory, daysAhead) => run("chat", async () => { const result: any = await chat({ sessionId, routineId, name, message, trajectory, daysAhead }); if (result?.provider !== "openai") setNotice({ kind: "warning", text: result?.warning || "Future Self used a transparent fallback response." }); }, "Future Self is temporarily unavailable.")}
+    onResearch={(routineId) => run("research", async () => { await realityCheck({ sessionId, routineId }); setNotice({ kind: "success", text: "Current sources are now attached to this branch." }); }, "Live research failed.")}
+    onEmail={(routineId, email) => run("email", async () => { const result: any = await sendFutureLetter({ sessionId, routineId, email, name }); if (result?.outboundId) { setOutboundId(result.outboundId); localStorage.setItem("futureos-outbound-id", result.outboundId); } setNotice({ kind: result?.generationProvider === "openai" ? "success" : "warning", text: result?.generationProvider === "openai" ? "Your future letter is queued." : "The letter was queued with a transparent fallback." }); }, "The email could not be sent.")}
   />;
 }
-
-type FrameProps = {
-  snapshot: any;
-  tab: Tab;
-  setTab: (tab: Tab) => void;
-  name: string;
-  setName: (name: string) => void;
-  busy: string;
-  notice: Notice;
-  emailStatus: any;
-  onCreate: (preset: Preset) => void;
-  onSelect: (routineId: string) => void;
-  onLog: (routineId: string, state: DayState) => void;
-  onChat: (routineId: string, message: string) => void;
-  onResearch: (routineId: string) => void;
-  onEmail: (routineId: string, email: string) => void;
-  preview?: boolean;
-};
-
-function AppFrame(props: FrameProps) {
-  const { snapshot, name, setName, notice } = props;
-  const selected = snapshot?.selected;
-  return <div className="app-shell">
-    <a className="skip-link" href="#main">Skip to main content</a>
-    <header className="masthead">
-      <a className="brand" href="/" aria-label="FutureOS home"><span className="brand-mark" aria-hidden="true"><i /><i /><i /></span><span>FutureOS</span></a>
-      <p>Past is information. Future is direction. <strong>Today is control.</strong></p>
-      {selected && <label className="name-field"><span>Your name</span><input value={name} maxLength={48} onChange={(event) => setName(event.target.value)} /></label>}
-    </header>
-    {notice && <StatusNotice notice={notice} />}
-    {!selected ? <Onboarding busy={props.busy === "create"} onPick={props.onCreate} /> : <Workspace {...props} selected={selected} />}
-    <footer className="sponsor-bar" aria-label="Technology partners"><span>Built with</span><strong>Convex</strong><strong>OpenAI</strong><strong>Firecrawl</strong><strong>AgentMail</strong></footer>
-  </div>;
+type FrameProps = { snapshot: any; name: string; setName: (v: string) => void; busy: string; notice: Notice; emailStatus?: any; onCreate: (preset: Preset) => void; onLog: (id: string, state: DayState) => void; onChat: (id: string, message: string, trajectory: Trajectory, daysAhead: number) => void; onResearch: (id: string) => void; onEmail: (id: string, email: string) => void; preview?: boolean };
+function FutureOSFrame(props: FrameProps) {
+  const selected = props.snapshot?.selected;
+  return <div className="futureos-shell"><a className="skip-link" href="#simulator">Skip to simulator</a><header className="topbar"><a className="brand" href="/">FutureOS<span>future branches</span></a>{selected && <label className="identity-field"><span>Speaking as</span><input aria-label="Your name" value={props.name} maxLength={48} onChange={(e) => props.setName(e.target.value)} /></label>}<span className="topbar-note">A rehearsal, never a prophecy</span></header>{props.notice && <NoticeBar notice={props.notice} />}{!selected ? <Onboarding onPick={props.onCreate} busy={props.busy === "create"} /> : <Simulator {...props} selected={selected} />}</div>;
 }
-
-function Onboarding({ busy, onPick }: { busy: boolean; onPick: (preset: Preset) => void }) {
-  return <main id="main" className="onboarding">
-    <section className="onboarding-copy">
-      <span className="section-number">01 / Choose a branch</span>
-      <h1>Don’t predict your future.<br />Talk to the person your choices are creating.</h1>
-      <p>Pick one behavior you control. FutureOS turns it into a plausible branch—a story you can update, question, and ground in live evidence.</p>
-      <div className="truth-note"><Icon name="compass" /><span><strong>Not prophecy.</strong> No guaranteed health, love, money, career, or psychological outcomes. Other people keep their agency.</span></div>
-    </section>
-    <section className="preset-board" aria-labelledby="preset-heading">
-      <div className="board-heading"><span id="preset-heading">Start with a focused routine</span><span>4 branches</span></div>
-      {presets.map((preset, index) => <button className="preset-row" disabled={busy} key={preset.title} onClick={() => onPick(preset)}>
-        <span className="preset-index">0{index + 1}</span>
-        <span className="preset-copy"><strong>{preset.title}</strong><small>{preset.dailyTarget} {preset.unit} · {preset.days} days</small><span>{preset.why}</span></span>
-        <Icon name="arrow" />
-      </button>)}
-      <p className="board-note">You can log Done, Partial, or Missed. No streak is treated as a moral score.</p>
-    </section>
-  </main>;
+function Onboarding({ onPick, busy }: { onPick: (preset: Preset) => void; busy: boolean }) {
+  return <main className="onboarding-new" id="simulator"><section><span className="eyebrow">01 — start a branch</span><h1>Same you.<br /><em>Different</em> tomorrows.</h1><p>Choose one controllable routine. Then talk directly to the version of you it could gradually create—whether you continue or need to recover.</p><div className="truth"><Icon name="spark" /><span><b>Honest by design.</b> FutureOS does not promise health, money, romance, or certainty. It helps you rehearse the next controllable choice.</span></div></section><section className="routine-picker" aria-label="Choose a routine">{presets.map((preset, i) => <motion.button whileHover={{ x: 5 }} whileTap={{ scale: .985 }} key={preset.title} disabled={busy} onClick={() => onPick(preset)}><span>0{i + 1}</span><strong>{preset.title}</strong><small>{preset.dailyTarget} {preset.unit} · {preset.days} days</small><Icon name="arrow" /></motion.button>)}</section></main>;
 }
-
-function Workspace(props: FrameProps & { selected: any }) {
-  const { snapshot, selected, tab, setTab } = props;
-  const progress = progressFor(selected, snapshot.stats);
-  return <div className="workspace">
-    <aside className="branch-rail" aria-label="Active future branch">
-      <span className="section-number">Active branch</span>
-      <h1>{selected.title}</h1>
-      <p>{selected.why}</p>
-      <div className="branch-progress" aria-label={`${progress}% of branch evidence logged`}><span style={{ width: `${progress}%` }} /></div>
-      <div className="branch-days"><strong>Day {Math.min(selected.days, (snapshot.stats?.done ?? 0) + (snapshot.stats?.partial ?? 0) + (snapshot.stats?.skip ?? 0) + 1)}</strong><span>of {selected.days}</span></div>
-      <dl className="evidence-counts">
-        <div><dt>Done</dt><dd>{snapshot.stats?.done ?? 0}</dd></div>
-        <div><dt>Partial</dt><dd>{snapshot.stats?.partial ?? 0}</dd></div>
-        <div><dt>Missed</dt><dd>{snapshot.stats?.skip ?? 0}</dd></div>
-      </dl>
-      {snapshot.routines.length > 1 && <label className="branch-select"><span>Switch branch</span><select value={selected._id} onChange={(event) => props.onSelect(event.target.value)}>{snapshot.routines.map((routine: any) => <option key={routine._id} value={routine._id}>{routine.title}</option>)}</select></label>}
-      <button className="reset-button" onClick={() => {
-        if (window.confirm("Reset this local demo session? The current browser will start with no selected branch.")) {
-          localStorage.removeItem("futureos-all-gas-session");
-          localStorage.removeItem("futureos-outbound-id");
-          window.location.reload();
-        }
-      }}>Reset local demo</button>
-    </aside>
-    <div className="work-area">
-      <nav className="view-tabs" aria-label="FutureOS views">
-        <TabButton active={tab === "today"} icon="sun" onClick={() => setTab("today")}>Today</TabButton>
-        <TabButton active={tab === "future"} icon="message" onClick={() => setTab("future")}>Future You</TabButton>
-        <TabButton active={tab === "reality"} icon="search" onClick={() => setTab("reality")}>Reality Check</TabButton>
-      </nav>
-      <main id="main" className="main-surface">
-        {tab === "today" && <TodayView selected={selected} stats={snapshot.stats} todayState={snapshot.todayState} story={snapshot.story} busy={props.busy} onLog={props.onLog} />}
-        {tab === "future" && <FutureView selected={selected} name={props.name} messages={snapshot.messages} inbound={snapshot.inbound} busy={props.busy} onChat={props.onChat} onEmail={props.onEmail} emailStatus={props.emailStatus} preview={props.preview} />}
-        {tab === "reality" && <RealityView selected={selected} research={snapshot.research} busy={props.busy} onRun={props.onResearch} preview={props.preview} />}
-      </main>
-    </div>
-  </div>;
+function Simulator(props: FrameProps & { selected: any }) {
+  const { selected, snapshot, busy } = props; const [trajectory, setTrajectory] = useState<Trajectory>("continue"); const [daysAhead, setDaysAhead] = useState(7); const [chat, setChat] = useState(""); const [email, setEmail] = useState(""); const [panel, setPanel] = useState<"evidence" | "sources" | "letter">("evidence"); const reduced = useReducedMotion();
+  const messages = snapshot.messages || []; const logged = (snapshot.stats?.done ?? 0) + (snapshot.stats?.partial ?? 0) + (snapshot.stats?.skip ?? 0); const day = Math.min(selected.days, logged + 1); const estimated = trajectory === "continue" ? Math.min(100, (snapshot.stats?.consistency ?? 0) + Math.round(daysAhead * 1.2)) : Math.max(0, (snapshot.stats?.consistency ?? 0) - Math.round(daysAhead * .65));
+  const question = trajectory === "continue" ? `If I keep returning for the next ${daysAhead} days, what changes honestly?` : `If I have to recover over the next ${daysAhead} days, where do I start without pretending?`;
+  const submit = (event: React.FormEvent) => { event.preventDefault(); const text = chat.trim(); if (!text || busy === "chat" || props.preview) return; setChat(""); props.onChat(selected._id, text, trajectory, daysAhead); };
+  const submitEmail = (event: React.FormEvent) => { event.preventDefault(); if (!email.trim() || busy === "email" || props.preview) return; props.onEmail(selected._id, email.trim()); };
+  return <main className="simulator" id="simulator"><aside className="left-rail"><span className="eyebrow">Your routine</span><h2>{selected.title}</h2><p>{selected.why}</p><div className="day-readout"><span>Today</span><strong>Day {day}</strong><small>of {selected.days}</small></div><div className="evidence-buttons" role="group" aria-label="Record today’s evidence">{(["done", "partial", "skip"] as DayState[]).map((state) => <button key={state} aria-pressed={snapshot.todayState === state} disabled={busy === "log" || props.preview} onClick={() => props.onLog(selected._id, state)}><i className={state} />{state === "done" ? "Done" : state === "partial" ? "Partial" : "Missed"}</button>)}</div><dl><div><dt>Done</dt><dd>{snapshot.stats?.done ?? 0}</dd></div><div><dt>Partial</dt><dd>{snapshot.stats?.partial ?? 0}</dd></div><div><dt>Missed</dt><dd>{snapshot.stats?.skip ?? 0}</dd></div></dl><button className="reset-link" onClick={() => { if (window.confirm("Reset this browser’s local FutureOS session?")) { localStorage.removeItem("futureos-all-gas-session"); localStorage.removeItem("futureos-outbound-id"); window.location.reload(); } }}>Reset local branch</button></aside>
+    <section className="main-stage"><header className="stage-heading"><span className="eyebrow">Future-self simulator</span><h1>You are <em>{daysAhead} choices</em> away from this version.</h1><p>Move the horizon, choose a path, then ask the future self shaped by that scenario.</p></header><div className="trajectory-controls"><div className="path-switch" role="group" aria-label="Choose a trajectory"><button className={trajectory === "continue" ? "active continue" : ""} onClick={() => setTrajectory("continue")}><span>01</span><b>Continue</b><small>Compound the return</small></button><button className={trajectory === "recover" ? "active recover" : ""} onClick={() => setTrajectory("recover")}><span>02</span><b>Recover</b><small>Restart without punishment</small></button></div><label className="horizon"><span>Time horizon <b>{daysAhead} days</b></span><input type="range" min="1" max={Math.min(30, selected.days)} value={daysAhead} onChange={(e) => setDaysAhead(Number(e.target.value))} /><span className="range-ends"><small>Tomorrow</small><small>30 days</small></span></label></div><section className="branch-visual" aria-label={`${trajectory} scenario over ${daysAhead} days`}><BranchScene trajectory={trajectory} daysAhead={daysAhead} reduced={Boolean(reduced)} /><div className="visual-grid" aria-hidden="true" /><div className="axis axis-start"><span>Now</span><b>Day {day}</b></div><motion.div key={`${trajectory}-${daysAhead}`} initial={reduced ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`branch-callout ${trajectory}`}><span>{trajectory === "continue" ? "CONTINUE" : "RECOVER"}</span><strong>{trajectory === "continue" ? "Repetition gets more familiar." : "A return still moves forward."}</strong><small>{estimated}% rehearsal signal · not a prediction</small></motion.div></section><p className="simulation-note"><Icon name="info" />This scene is a decision rehearsal based on your logged evidence, not a forecast of your life.</p></section>
+    <aside className="future-panel"><div className="future-panel-head"><span className="eyebrow">Day {Math.min(selected.days, day + daysAhead)} you</span><span className="live-dot">Live context</span></div><AnimatePresence mode="wait"><motion.div key={trajectory} initial={reduced ? false : { opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }} className="scenario-summary"><span>{trajectory === "continue" ? "The continuation branch" : "The recovery branch"}</span><p>{trajectory === "continue" ? `This is the version shaped by returning for ${daysAhead} more honest days—not perfect ones.` : `This is the version shaped by a reset and ${daysAhead} days of smaller, real returns.`}</p></motion.div></AnimatePresence><div className="messages" aria-live="polite" aria-busy={busy === "chat"}>{messages.length === 0 && <FutureMessage name={props.name} trajectory={trajectory} daysAhead={daysAhead} />}{messages.map((m: any) => <article key={m._id} className={`message ${m.role}`}><span>{m.role === "user" ? "You" : "Future You"}{m.provider === "fallback" ? " · transparent fallback" : ""}</span><p>{m.content}</p></article>)}{busy === "chat" && <div className="thinking"><i /><i /><i /><span>Future You is thinking</span></div>}</div><div className="prompt-row"><button onClick={() => setChat(question)}>{question}</button><button onClick={() => setChat("What is the next small action you need from me today?")}>What do you need from me today?</button></div><form className="chat-form" onSubmit={submit}><label htmlFor="future-message">Talk to this future self</label><textarea id="future-message" value={chat} maxLength={600} rows={3} onChange={(e) => setChat(e.target.value)} placeholder="Say what is actually happening today…" /><button disabled={!chat.trim() || busy === "chat" || props.preview} type="submit">Ask this future <Icon name="arrow" /></button></form><div className="panel-drawer"><div className="drawer-tabs"><button className={panel === "evidence" ? "active" : ""} onClick={() => setPanel("evidence")}>Evidence</button><button className={panel === "sources" ? "active" : ""} onClick={() => setPanel("sources")}>Reality</button><button className={panel === "letter" ? "active" : ""} onClick={() => setPanel("letter")}>Letter</button></div>{panel === "evidence" && <p><b>{progressFor(selected, snapshot.stats)}%</b> of the routine has logged evidence. Your next action still matters more than the number.</p>}{panel === "sources" && <div><p>Keep facts and imagination separate. Search current sources for this routine when you need them.</p><button className="text-action" disabled={busy === "research" || props.preview} onClick={() => props.onResearch(selected._id)}>{busy === "research" ? "Searching…" : snapshot.research ? "Refresh live sources" : "Run reality check"} <Icon name="arrow" /></button>{snapshot.research?.items?.slice(0, 2).map((item: any) => <a key={item.url} href={item.url} target="_blank" rel="noreferrer">{item.title}</a>)}</div>}{panel === "letter" && <form onSubmit={submitEmail}><p>Receive a real letter from this future branch and reply to return here.</p><label htmlFor="future-email">Email address</label><input id="future-email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" /><button className="text-action" disabled={busy === "email" || props.preview}>{busy === "email" ? "Queuing…" : "Send future letter"} <Icon name="arrow" /></button>{props.emailStatus && <small className="delivery">AgentMail: {props.emailStatus.status}</small>}</form>}</div></aside></main>;
 }
-
-function TabButton({ active, icon, children, onClick }: { active: boolean; icon: IconName; children: React.ReactNode; onClick: () => void }) {
-  return <button aria-current={active ? "page" : undefined} className={active ? "active" : ""} onClick={onClick}><Icon name={icon} />{children}</button>;
+function FutureMessage({ name, trajectory, daysAhead }: { name: string; trajectory: Trajectory; daysAhead: number }) { return <article className="message assistant"><span>Future You</span><p>{name}, I’m the plausible branch {daysAhead} days from now where {trajectory === "continue" ? "you kept making the next return" : "you stopped treating a slip as the end"}. Ask me the question you’re avoiding.</p></article>; }
+function BranchScene({ trajectory, daysAhead, reduced }: { trajectory: Trajectory; daysAhead: number; reduced: boolean }) {
+  const host = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const element = host.current;
+    if (!element) return;
+    let disposed = false;
+    let clean = () => {};
+    void import("three").then((THREE) => {
+      if (disposed) return;
+      const scene = new THREE.Scene(); const camera = new THREE.PerspectiveCamera(44, 1, .1, 100); camera.position.set(0, 0, 11); const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }); renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); element.appendChild(renderer.domElement);
+      const root = new THREE.Group(); root.rotation.x = -.22; root.rotation.y = -.18; scene.add(root); const lime = new THREE.Color("#c8ff4d"), amber = new THREE.Color("#ffb74d"), quiet = new THREE.Color("#5b6259"); const sphere = new THREE.SphereGeometry(.085, 12, 12);
+      const branch = (points: any[], active: boolean, warm: boolean) => { const curve = new THREE.CatmullRomCurve3(points); const geometry = new THREE.BufferGeometry().setFromPoints(curve.getPoints(44)); root.add(new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: active ? (warm ? amber : lime) : quiet, transparent: true, opacity: active ? .98 : .27 }))); points.slice(1).forEach((point, i) => { const mesh = new THREE.Mesh(sphere, new THREE.MeshBasicMaterial({ color: active && i < Math.max(2, Math.ceil(daysAhead / 5)) ? (warm ? amber : lime) : quiet, transparent: true, opacity: active ? .95 : .35 })); mesh.position.copy(point); root.add(mesh); }); };
+      const paths = [
+      [new THREE.Vector3(-4.1, -1.4, 0), new THREE.Vector3(-2.3, -.2, .2), new THREE.Vector3(-.7, .15, -.15), new THREE.Vector3(1.4, 1.2, .3), new THREE.Vector3(4.2, 1.65, -.2)],
+      [new THREE.Vector3(-4.1, -1.4, 0), new THREE.Vector3(-2.5, -2.1, -.3), new THREE.Vector3(-.8, -1.5, .4), new THREE.Vector3(1.5, -2.4, -.2), new THREE.Vector3(4.1, -2.8, .25)],
+      [new THREE.Vector3(-4.1, -1.4, 0), new THREE.Vector3(-2.7, .95, -.4), new THREE.Vector3(-.8, 1.4, .1), new THREE.Vector3(1.3, 2.55, -.15), new THREE.Vector3(4.3, 2.8, .15)],
+      [new THREE.Vector3(-4.1, -1.4, 0), new THREE.Vector3(-1.9, -1.2, .45), new THREE.Vector3(.2, -.4, -.35), new THREE.Vector3(2.2, -.15, .2), new THREE.Vector3(4.4, .2, -.15)],
+      ]; paths.forEach((points, i) => branch(points, trajectory === "continue" ? i === 0 : i === 1, i === 1));
+      const resize = () => { const { width, height } = element.getBoundingClientRect(); renderer.setSize(width, height, false); camera.aspect = width / Math.max(1, height); camera.updateProjectionMatrix(); }; resize(); const observer = new ResizeObserver(resize); observer.observe(element); let frame = 0; const tick = () => { frame = requestAnimationFrame(tick); if (!reduced) { root.rotation.y += .0012; root.rotation.z = Math.sin(Date.now() / 4000) * .025; } renderer.render(scene, camera); }; tick();
+      clean = () => { cancelAnimationFrame(frame); observer.disconnect(); root.traverse((child: any) => { child.geometry?.dispose?.(); child.material?.dispose?.(); }); renderer.dispose(); renderer.domElement.remove(); };
+    });
+    return () => { disposed = true; clean(); };
+  }, [trajectory, daysAhead, reduced]); return <div className="three-branch" aria-hidden="true" ref={host} />;
 }
-
-function TodayView({ selected, stats, todayState, story, busy, onLog }: any) {
-  const labels: Record<DayState, string> = { done: "Done", partial: "Partial", skip: "Missed" };
-  return <section className="view today-view" aria-labelledby="today-heading">
-    <ViewHeader index="01" label="Today’s evidence" title={`${selected.dailyTarget} ${selected.unit}`} aside={`${stats?.consistency ?? 0}% consistency`} />
-    <p className="view-intro" id="today-heading">You do not need to emotionally live at Day {selected.days}. Give this branch one honest data point today.</p>
-    <div className="day-choices" role="group" aria-label="How did today go?">
-      {(Object.keys(labels) as DayState[]).map((state) => <button key={state} disabled={busy === "log"} aria-pressed={todayState === state} onClick={() => onLog(selected._id, state)}>
-        <Icon name={state === "done" ? "check" : state === "partial" ? "half" : "return"} />
-        <span><strong>{labels[state]}</strong><small>{state === "done" ? "Target completed" : state === "partial" ? "Some honest progress" : "Record it, then return"}</small></span>
-      </button>)}
-    </div>
-    <div className="story-heading"><span>How this branch could unfold</span><small>Plausible narrative · not a forecast</small></div>
-    <ol className="story-line">{story.map((item: any, index: number) => <li key={item.day}><span className="story-node">{String(index + 1).padStart(2, "0")}</span><article><small>Day {item.day}</small><h2>{item.title}</h2><p>{item.scene}</p><blockquote>{item.lesson}</blockquote></article></li>)}</ol>
-  </section>;
-}
-
-function FutureView({ selected, name, messages, inbound, busy, onChat, onEmail, emailStatus, preview }: any) {
-  const [chat, setChat] = useState("");
-  const [email, setEmail] = useState("");
-  const endRef = useRef<HTMLDivElement>(null);
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }); }, [messages.length, busy]);
-  const submitChat = (event: React.FormEvent) => {
-    event.preventDefault();
-    const value = chat.trim();
-    if (!value || busy === "chat" || preview) return;
-    setChat("");
-    onChat(selected._id, value);
-  };
-  const submitEmail = (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!email.trim() || busy === "email" || preview) return;
-    onEmail(selected._id, email.trim());
-  };
-  return <section className="view future-view" aria-labelledby="future-heading">
-    <ViewHeader index="02" label={`Talk to Day ${selected.days} You`} title="One plausible future, in conversation." aside="Powered by OpenAI" />
-    <div className="future-layout">
-      <div className="conversation">
-        <div className="messages" aria-live="polite" aria-busy={busy === "chat"}>
-          {messages.length === 0 && <div className="message assistant"><span>Future You</span><p>{name}, I’m the Day {selected.days} branch you’re rehearsing. Ask what was hard, what changed, or what I need you to do today.</p></div>}
-          {messages.map((message: any) => <div key={message._id} className={`message ${message.role === "user" ? "user" : "assistant"}`}><span>{message.role === "user" ? "You" : "Future You"}{message.provider === "fallback" ? " · fallback" : ""}</span><p>{message.content}</p></div>)}
-          {busy === "chat" && <div className="message-thinking"><i /><i /><i /><span>Future You is responding</span></div>}
-          <div ref={endRef} />
-        </div>
-        <div className="quick-prompts" aria-label="Suggested questions">{["I missed yesterday. Did I ruin this?", "What changed honestly?", "What should I do right now?"].map((prompt) => <button key={prompt} onClick={() => setChat(prompt)}>{prompt}</button>)}</div>
-        <form className="composer" onSubmit={submitChat}><label htmlFor="future-message">Message Future You</label><div><textarea id="future-message" rows={2} value={chat} onChange={(event) => setChat(event.target.value)} placeholder="Say what is actually happening today…" /><button disabled={!chat.trim() || busy === "chat" || preview} type="submit">Send <Icon name="arrow" /></button></div></form>
-      </div>
-      <aside className="letter-panel">
-        <span className="section-number">Letter through time</span>
-        <h2>Let Future You reach your real inbox.</h2>
-        <p>AgentMail creates a real address for this branch. Reply to the letter and the response returns here through Convex.</p>
-        <form onSubmit={submitEmail}><label htmlFor="future-email">Your email</label><input id="future-email" autoComplete="email" inputMode="email" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /><button disabled={busy === "email" || preview}>{busy === "email" ? "Queuing letter…" : "Email me from the future"}</button></form>
-        {emailStatus && <div className={`delivery-status ${emailStatus.status === "bounced" || emailStatus.status === "failed" ? "failed" : ""}`} role="status"><Icon name="mail" /><span><strong>{emailStatus.status === "delivered" ? "Delivered" : emailStatus.status === "bounced" ? "Bounced" : "AgentMail status"}</strong><small>{emailStatus.errorMessage || emailStatus.status}</small></span></div>}
-        {inbound?.length > 0 && <div className="replies"><h3>Replies received</h3>{inbound.map((reply: any) => <article key={reply._id}><small>{reply.from}</small><strong>{reply.subject}</strong><p>{reply.text || "Reply received without a plain-text body."}</p></article>)}</div>}
-      </aside>
-    </div>
-  </section>;
-}
-
-function RealityView({ selected, research, busy, onRun, preview }: any) {
-  return <section className="view reality-view" aria-labelledby="reality-heading">
-    <ViewHeader index="03" label="Reality layer" title="Keep evidence separate from imagination." aside="Live via Firecrawl" />
-    <div className="reality-intro"><p id="reality-heading">FutureOS uses story for direction and live sources for facts. Firecrawl searches the current web for practical evidence around <strong>{selected.title}</strong>.</p><button disabled={busy === "research" || preview} onClick={() => onRun(selected._id)}>{busy === "research" ? "Searching live sources…" : research ? "Refresh live sources" : "Run live reality check"}<Icon name="search" /></button></div>
-    {!research ? <div className="research-empty"><Icon name="layers" /><div><h2>No outside evidence yet.</h2><p>Run a Reality Check when you want current sources. Generated story stays on the other side of this line.</p></div></div> : <div className="source-list">
-      <div className="query-line"><span>Latest query</span><code>{research.query}</code></div>
-      {research.items.map((source: any, index: number) => <a key={source.url} href={source.url} target="_blank" rel="noreferrer"><span className="source-index">0{index + 1}</span><span><small>{safeHost(source.url)}</small><strong>{source.title}</strong><p>{source.description || "Open the source to read more."}</p></span><Icon name="external" /></a>)}
-    </div>}
-  </section>;
-}
-
-function safeHost(url: string) { try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return "source"; } }
-
-function ViewHeader({ index, label, title, aside }: { index: string; label: string; title: string; aside: string }) {
-  return <header className="view-header"><div><span className="section-number">{index} / {label}</span><h1>{title}</h1></div><span className="provider-label">{aside}</span></header>;
-}
-
-function StatusNotice({ notice }: { notice: NonNullable<Notice> }) {
-  return <div className={`status-notice ${notice.kind}`} role={notice.kind === "error" ? "alert" : "status"}><Icon name={notice.kind === "error" ? "alert" : notice.kind === "warning" ? "info" : "check"} /><span>{notice.text}</span></div>;
-}
-
-function LoadingState() {
-  return <div className="loading-shell" aria-busy="true"><div className="loading-brand"><span className="brand-mark" aria-hidden="true"><i /><i /><i /></span><strong>FutureOS</strong></div><div className="loading-layout"><aside /><main><span /><span /><span /></main></div><p>Restoring your future branch…</p></div>;
-}
-
-function CenteredState({ title, detail, action, onAction }: { title: string; detail: string; action?: string; onAction?: () => void }) {
-  return <main className="centered-state"><span className="brand-mark" aria-hidden="true"><i /><i /><i /></span><h1>{title}</h1><p>{detail}</p>{action && <button onClick={onAction}>{action}</button>}</main>;
-}
-
-type IconName = "arrow" | "check" | "half" | "return" | "sun" | "message" | "search" | "compass" | "mail" | "layers" | "external" | "alert" | "info";
-function Icon({ name }: { name: IconName }) {
-  const paths: Record<IconName, React.ReactNode> = {
-    arrow: <><path d="M5 12h14"/><path d="m14 7 5 5-5 5"/></>,
-    check: <path d="m5 12 4 4L19 6"/>,
-    half: <><circle cx="12" cy="12" r="8"/><path d="M12 4v16"/></>,
-    return: <><path d="M9 7 4 12l5 5"/><path d="M20 17v-2a3 3 0 0 0-3-3H4"/></>,
-    sun: <><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"/></>,
-    message: <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/>,
-    search: <><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></>,
-    compass: <><circle cx="12" cy="12" r="9"/><path d="m15 9-2 4-4 2 2-4z"/></>,
-    mail: <><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></>,
-    layers: <><path d="m12 3 9 5-9 5-9-5z"/><path d="m3 12 9 5 9-5"/><path d="m3 16 9 5 9-5"/></>,
-    external: <><path d="M14 4h6v6"/><path d="m20 4-9 9"/><path d="M18 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5"/></>,
-    alert: <><path d="M12 3 2 21h20z"/><path d="M12 9v5M12 18h.01"/></>,
-    info: <><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></>,
-  };
-  return <svg className="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
-}
-
+function NoticeBar({ notice }: { notice: NonNullable<Notice> }) { return <div className={`notice ${notice.kind}`} role={notice.kind === "error" ? "alert" : "status"}><Icon name={notice.kind === "error" ? "alert" : "info"} />{notice.text}</div>; }
+function LoadingState() { return <div className="loading"><span>FutureOS</span><b>Restoring your branch…</b></div>; }
+function CenteredState({ title, detail, action, onAction }: { title: string; detail: string; action?: string; onAction?: () => void }) { return <main className="center"><span>FutureOS</span><h1>{title}</h1><p>{detail}</p>{action && <button onClick={onAction}>{action}</button>}</main>; }
+type IconName = "arrow" | "spark" | "info" | "alert";
+function Icon({ name }: { name: IconName }) { const paths: Record<IconName, React.ReactNode> = { arrow: <><path d="M4 12h15" /><path d="m14 6 6 6-6 6" /></>, spark: <path d="m12 2 1.8 7.2L21 12l-7.2 1.8L12 21l-1.8-7.2L3 12l7.2-2.8z" />, info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v5m0-9h.01" /></>, alert: <><path d="M12 3 2 21h20z" /><path d="M12 9v5m0 4h.01" /></> }; return <svg className="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>; }
 export { progressFor };

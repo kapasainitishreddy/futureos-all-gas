@@ -6,7 +6,8 @@ import { components, internal } from "./_generated/api";
 const agentmail = new AgentMail(components.agentmail, {
   onMessageReceived: internal.mailStore.onMessageReceived,
 });
-const MODEL = "gpt-5.6-luna";
+// Keep generated letters on the same low-cost, broadly available API model as chat.
+const MODEL = "gpt-4.1-nano";
 const mailStore = internal.mailStore as any;
 const agentmailOps = internal.agentmailOps as any;
 const limitsInternal = internal.limits as any;
@@ -47,7 +48,6 @@ export const sendFutureLetter = action({
         body:JSON.stringify({
           model:MODEL,
           max_output_tokens:280,
-          reasoning:{effort:"low"},
           store:false,
           safety_identifier:args.sessionId.slice(0,64),
           instructions:"Write a warm email under 130 words from a plausible future self after the chosen routine. Never claim certainty or guarantee outcomes. Never invent another person's decisions. End with one safe, concrete action for today.",

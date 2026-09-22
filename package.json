@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22.13.0" },
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -16,13 +18,16 @@
     "@convex-dev/static-hosting": "0.2.1",
     "@firecrawl/firecrawl-convex": "0.1.1",
     "convex": "1.46.0",
+    "motion": "^13.4.1",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "three": "^0.186.0"
   },
   "devDependencies": {
     "@types/node": "26.6.2",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
+    "@types/three": "^0.186.0",
     "@vitejs/plugin-react": "6.1.1",
     "jsdom": "30.1.1",
     "typescript": "7.0.2",

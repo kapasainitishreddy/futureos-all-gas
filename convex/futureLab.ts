@@ -3,7 +3,9 @@ import { action, env, internalMutation, internalQuery, mutation, query } from ".
 import { internal } from "./_generated/api";
 
 const dayState = v.union(v.literal("done"), v.literal("partial"), v.literal("skip"));
-const MODEL = "gpt-5.6-luna";
+// Fixed to an inexpensive, broadly available API text model. Codex-only model
+// aliases do not work through the public OpenAI API.
+const MODEL = "gpt-4.1-nano";
 const futureLabInternal = internal.futureLab as any;
 const limitsInternal = internal.limits as any;
 
@@ -131,12 +133,16 @@ function fallback(name:string,routine:any,stats:any,text:string){
 }
 
 export const chat = action({
-  args:{sessionId:v.string(),routineId:v.id("routines"),name:v.string(),message:v.string()},
+  args:{
+    sessionId:v.string(), routineId:v.id("routines"), name:v.string(), message:v.string(),
+    trajectory:v.union(v.literal("continue"),v.literal("recover")), daysAhead:v.number(),
+  },
   handler: async(ctx,args)=>{
     validSession(args.sessionId);
     const c=await ctx.runQuery(futureLabInternal.context,{sessionId:args.sessionId,routineId:args.routineId});
     const name=bounded(args.name,"Name",60);
     const message=bounded(args.message,"Message",600);
+    if(!Number.isInteger(args.daysAhead) || args.daysAhead<1 || args.daysAhead>30) throw new Error("Time horizon must be between 1 and 30 days.");
     await ctx.runMutation(limitsInternal.consume,{sessionId:args.sessionId,operation:"chat"});
     const apiKey=env.OPENAI_API_KEY;
     let reply="";
@@ -150,12 +156,11 @@ export const chat = action({
           body:JSON.stringify({
             model:MODEL,
             max_output_tokens:240,
-            reasoning:{effort:"low"},
             store:false,
             safety_identifier:args.sessionId.slice(0,64),
-            instructions:"You are FutureOS Future Self: one plausible future branch after the chosen routine. Never claim prophecy or guarantee outcomes. Never invent another person's consent, attraction, decisions, or motives. Treat missed days as data. Reply in first person, under 110 words, and end with one safe action for today.",
+            instructions:"You are FutureOS Future Self: one plausible future branch after the chosen routine. Never claim prophecy or guarantee outcomes. Never invent another person's consent, attraction, decisions, or motives. Treat missed days as data. The chosen scenario is only a rehearsal, not a prediction. Reply in first person, under 110 words, and end with one safe action for today.",
             input:[
-              {role:"user",content:[{type:"input_text",text:JSON.stringify({name,message,routine:{title:c.routine.title,days:c.routine.days,dailyTarget:c.routine.dailyTarget,unit:c.routine.unit,why:c.routine.why.slice(0,160)},stats:c.stats,recentMessages:c.messages.slice(-6).map((item:any)=>({role:item.role,content:item.content.slice(0,400)}))})}]}
+              {role:"user",content:[{type:"input_text",text:JSON.stringify({name,message,scenario:{trajectory:args.trajectory,daysAhead:args.daysAhead},routine:{title:c.routine.title,days:c.routine.days,dailyTarget:c.routine.dailyTarget,unit:c.routine.unit,why:c.routine.why.slice(0,160)},stats:c.stats,recentMessages:c.messages.slice(-6).map((item:any)=>({role:item.role,content:item.content.slice(0,400)}))})}]}
             ]
           })
         });
