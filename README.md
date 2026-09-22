@@ -2,7 +2,7 @@
 
 > Don’t predict your future. Talk to the person your choices are creating.
 
-FutureOS turns a routine you control into a plausible future-self branch. Log today as **Done**, **Partial**, or **Missed**, watch the branch evolve, talk to Future You, ground the story in live sources, and receive a real email from the branch.
+FutureOS turns a routine you control into a plausible future-self branch. Its main simulator lets you choose **Continue** or **Recover**, move a 1–30 day horizon, see the branch change in a purposeful 3D scene, and talk to the future self shaped by that exact scenario. You can then log today as **Done**, **Partial**, or **Missed**, ground the story in live sources, and receive a real email from the branch.
 
 FutureOS is motivational rehearsal—not prophecy. It never guarantees medical, sexual, romantic, career, financial, appearance, or psychological outcomes, and it never invents another person’s decisions.
 
@@ -10,7 +10,7 @@ FutureOS is motivational rehearsal—not prophecy. It never guarantees medical, 
 
 1. Create **Study One Hour** for 75 days.
 2. Record today as **Partial**.
-3. Ask Future You: “I missed yesterday. Did I ruin this?”
+3. Switch between **Continue** and **Recover**, move the time horizon, and ask Future You: “If I keep returning for the next 14 days, what changes honestly?”
 4. Run a **Reality Check** to fetch current sources.
 5. Send a **Letter Through Time** to your email.
 
@@ -19,7 +19,7 @@ Live demo: https://adept-ox-835.convex.site
 ## Sponsor stack
 
 - **Convex** — reactive routines, day evidence, messages, research, inbound replies, and static hosting.
-- **OpenAI** — Future Self conversation and future-letter generation through the Responses API, locked to the low-cost `gpt-5.6-luna` model with low reasoning and short output budgets.
+- **OpenAI** — Future Self conversation and future-letter generation through the Responses API, locked to the low-cost `gpt-4.1-nano` model with short output budgets.
 - **Firecrawl** — live web search shown separately from generated narrative.
 - **AgentMail** — a real Future You inbox, durable sending, delivery status, and inbound reply webhook.
 
@@ -29,7 +29,7 @@ The React/Vite client subscribes to one reactive Convex snapshot. Convex mutatio
 
 ## Run locally
 
-Requirements: Node.js 22.13+ and a Convex account.
+Requirements: Node.js 22.x and a Convex account.
 
 ```bash
 npm install
@@ -48,10 +48,11 @@ npx convex env set AGENTMAIL_WEBHOOK_SECRET "..."
 
 The public demo enforces server-side input bounds, cooldowns, and daily caps: 20 chats, 5 research requests, and 3 emails per anonymous session per UTC day. Global daily circuit breakers (250 chats, 50 research requests, and 25 emails) contain spend even if visitors reset their anonymous sessions. Model selection cannot be overridden by the client or environment.
 
-Deploy backend and frontend together:
+Deploy with Node 22.x (the current static-hosting CLI is not compatible with Node 24 on Windows):
 
 ```bash
-npm run deploy
+npx convex deploy --yes
+npx @convex-dev/static-hosting deploy --skip-convex
 ```
 
 ## Validation
